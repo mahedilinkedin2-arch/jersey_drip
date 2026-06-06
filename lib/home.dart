@@ -4,6 +4,7 @@ import 'cart_page.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
+import 'orders_page.dart';
 import 'product_details_page.dart';
 import 'services/cart_service.dart';
 import 'services/wishlist_service.dart';
@@ -169,6 +170,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ? const CartPage()
           : _activeTabIndex == 2
           ? const WishlistPage()
+          : _activeTabIndex == 3
+          ? const OrdersPage()
           : SafeArea(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),

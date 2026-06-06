@@ -45,11 +45,12 @@ class CartService {
       if (snapshot.exists) {
         final data = snapshot.data();
         final currentQuantity = _readInt(data?['quantity'], fallback: 1);
+        final cartPrice = _readInt(data?['price'], fallback: price);
         final nextQuantity = currentQuantity + 1;
 
         transaction.update(document, {
           'quantity': nextQuantity,
-          'totalPrice': price * nextQuantity,
+          'totalPrice': cartPrice * nextQuantity,
         });
         return;
       }

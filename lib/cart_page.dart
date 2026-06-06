@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'checkout_page.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
@@ -74,7 +75,10 @@ class _CartPageState extends State<CartPage> {
       return;
     }
 
-    _showMessage('${selectedItems.length} item(s) ready for checkout');
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CheckoutPage(items: selectedItems)),
+    );
   }
 
   void _showMessage(String message) {
