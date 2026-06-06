@@ -5,6 +5,7 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
 import 'models/product.dart';
 import 'services/cart_service.dart';
+import 'services/wishlist_service.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   const ProductDetailsPage({super.key, required this.product});
@@ -17,13 +18,15 @@ class ProductDetailsPage extends StatefulWidget {
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
   final CartService _cartService = CartService();
+  final WishlistService _wishlistService = WishlistService();
 
   late final List<String> _sizes = widget.product.sizes.isEmpty
       ? const ['S', 'M', 'L', 'XL']
       : widget.product.sizes;
+  late final Stream<Set<String>> _wishlistProductIdsStream = _wishlistService
+      .wishlistProductIdsStream();
 
   late String _selectedSize = _sizes.first;
-  bool _wishlisted = false;
 
   Product get product => widget.product;
 
@@ -45,12 +48,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     return 'Premium match-day style with a comfortable fit, clean finish, and everyday-ready feel for Jersey Drip shoppers.';
   }
 
-  void _toggleWishlist() {
-    setState(() {
-      _wishlisted = !_wishlisted;
-    });
-  }
-
   void _selectSize(String size) {
     setState(() {
       _selectedSize = size;
@@ -65,6 +62,15 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     } catch (_) {
       if (!mounted) return;
       _showMessage('Unable to add product to cart');
+    }
+  }
+
+  Future<void> _toggleWishlist(bool isWishlisted) async {
+    try {
+      await _wishlistService.toggleProduct(product, isWishlisted: isWishlisted);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('Unable to update wishlist');
     }
   }
 
@@ -172,10 +178,18 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _ProductImageSection(
-                imagePath: product.imagePath,
-                wishlisted: _wishlisted,
-                onWishlistToggle: _toggleWishlist,
+              StreamBuilder<Set<String>>(
+                stream: _wishlistProductIdsStream,
+                builder: (context, snapshot) {
+                  final isWishlisted =
+                      snapshot.data?.contains(product.id) ?? false;
+
+                  return _ProductImageSection(
+                    imagePath: product.imagePath,
+                    wishlisted: isWishlisted,
+                    onWishlistToggle: () => _toggleWishlist(isWishlisted),
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.lg),
               Row(

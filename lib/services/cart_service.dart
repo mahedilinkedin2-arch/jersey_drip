@@ -22,9 +22,22 @@ class CartService {
   }
 
   Future<void> addProduct(Product product) async {
+    return addItem(
+      productId: product.id,
+      name: product.name,
+      price: product.discountedPrice.toInt(),
+      imagePath: product.imagePath,
+    );
+  }
+
+  Future<void> addItem({
+    required String productId,
+    required String name,
+    required int price,
+    required String imagePath,
+  }) async {
     final uid = _requireUid();
-    final document = _cartCollection(uid).doc(product.id);
-    final price = product.discountedPrice.toInt();
+    final document = _cartCollection(uid).doc(productId);
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(document);
@@ -42,10 +55,10 @@ class CartService {
       }
 
       transaction.set(document, {
-        'productId': product.id,
-        'name': product.name,
+        'productId': productId,
+        'name': name,
         'price': price,
-        'imagePath': product.imagePath,
+        'imagePath': imagePath,
         'quantity': 1,
         'totalPrice': price,
       });

@@ -6,11 +6,13 @@ import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
 import 'product_details_page.dart';
 import 'services/cart_service.dart';
+import 'services/wishlist_service.dart';
 import 'widgets/app_search_bar.dart';
 import 'widgets/bottom_nav_bar.dart';
 import 'widgets/category_card.dart';
 import 'widgets/featured_banner.dart';
 import 'widgets/product_card.dart';
+import 'wishlist_page.dart';
 import 'package:jerseyapp/models/product.dart';
 import 'package:jerseyapp/services/product_service.dart';
 
@@ -24,9 +26,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ProductService _productService = ProductService();
   final CartService _cartService = CartService();
-  final Set<String> _wishlistedProductIds = {};
+  final WishlistService _wishlistService = WishlistService();
   late final Stream<List<Product>> _productsStream = _productService
       .productsStream();
+  late final Stream<Set<String>> _wishlistProductIdsStream = _wishlistService
+      .wishlistProductIdsStream();
 
   int _activeCategoryIndex = 0;
   int _activeTabIndex = 0;
@@ -88,16 +92,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return product.category == categoryByLabel[categoryLabel];
   }
 
-  void _toggleWishlist(String productId) {
-    setState(() {
-      if (_wishlistedProductIds.contains(productId)) {
-        _wishlistedProductIds.remove(productId);
-      } else {
-        _wishlistedProductIds.add(productId);
-      }
-    });
-  }
-
   String _formatPrice(double amount) {
     return '৳${amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)}';
   }
@@ -122,6 +116,15 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       if (!mounted) return;
       _showMessage('Unable to add product to cart');
+    }
+  }
+
+  Future<void> _toggleWishlist(Product product, bool isWishlisted) async {
+    try {
+      await _wishlistService.toggleProduct(product, isWishlisted: isWishlisted);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage('Unable to update wishlist');
     }
   }
 
@@ -164,6 +167,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: _activeTabIndex == 1
           ? const CartPage()
+          : _activeTabIndex == 2
+          ? const WishlistPage()
           : SafeArea(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
@@ -289,50 +294,61 @@ class _HomeScreenState extends State<HomeScreen> {
                           snapshot.data!,
                         );
 
-                        return LayoutBuilder(
-                          builder: (context, constraints) {
-                            final availableWidth = constraints.maxWidth;
-                            final maxItemWidth = availableWidth < 760
-                                ? availableWidth / 2.1
-                                : availableWidth < 1000
-                                ? 240.0
-                                : 270.0;
-                            final childAspectRatio = availableWidth >= 760
-                                ? 0.7
-                                : 0.62;
-                            return GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              padding: EdgeInsets.zero,
-                              itemCount: filteredProducts.length,
-                              gridDelegate:
-                                  SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: maxItemWidth,
-                                    mainAxisSpacing: AppSpacing.lg,
-                                    crossAxisSpacing: AppSpacing.lg,
-                                    childAspectRatio: childAspectRatio,
-                                  ),
-                              itemBuilder: (context, index) {
-                                final item = filteredProducts[index];
-                                return GestureDetector(
-                                  key: ValueKey(item.id),
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _openProductDetails(item),
-                                  child: ProductCard(
-                                    imagePath: item.imagePath,
-                                    name: item.name,
-                                    price: _formatPrice(item.discountedPrice),
-                                    originalPrice:
-                                        item.discountedPrice < item.price
-                                        ? _formatPrice(item.price)
-                                        : null,
-                                    wishlisted: _wishlistedProductIds.contains(
-                                      item.id,
-                                    ),
-                                    onWishlistToggle: () =>
-                                        _toggleWishlist(item.id),
-                                    onAddToCart: () => _addToCart(item),
-                                  ),
+                        return StreamBuilder<Set<String>>(
+                          stream: _wishlistProductIdsStream,
+                          builder: (context, wishlistSnapshot) {
+                            final wishlistedProductIds =
+                                wishlistSnapshot.data ?? const <String>{};
+
+                            return LayoutBuilder(
+                              builder: (context, constraints) {
+                                final availableWidth = constraints.maxWidth;
+                                final maxItemWidth = availableWidth < 760
+                                    ? availableWidth / 2.1
+                                    : availableWidth < 1000
+                                    ? 240.0
+                                    : 270.0;
+                                final childAspectRatio = availableWidth >= 760
+                                    ? 0.7
+                                    : 0.62;
+                                return GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  padding: EdgeInsets.zero,
+                                  itemCount: filteredProducts.length,
+                                  gridDelegate:
+                                      SliverGridDelegateWithMaxCrossAxisExtent(
+                                        maxCrossAxisExtent: maxItemWidth,
+                                        mainAxisSpacing: AppSpacing.lg,
+                                        crossAxisSpacing: AppSpacing.lg,
+                                        childAspectRatio: childAspectRatio,
+                                      ),
+                                  itemBuilder: (context, index) {
+                                    final item = filteredProducts[index];
+                                    final isWishlisted = wishlistedProductIds
+                                        .contains(item.id);
+
+                                    return GestureDetector(
+                                      key: ValueKey(item.id),
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _openProductDetails(item),
+                                      child: ProductCard(
+                                        imagePath: item.imagePath,
+                                        name: item.name,
+                                        price: _formatPrice(
+                                          item.discountedPrice,
+                                        ),
+                                        originalPrice:
+                                            item.discountedPrice < item.price
+                                            ? _formatPrice(item.price)
+                                            : null,
+                                        wishlisted: isWishlisted,
+                                        onWishlistToggle: () =>
+                                            _toggleWishlist(item, isWishlisted),
+                                        onAddToCart: () => _addToCart(item),
+                                      ),
+                                    );
+                                  },
                                 );
                               },
                             );
