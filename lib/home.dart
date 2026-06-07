@@ -4,18 +4,21 @@ import 'cart_page.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_spacing.dart';
 import 'core/theme/app_text_styles.dart';
+import 'models/product.dart';
+import 'models/user_profile.dart';
 import 'product_details_page.dart';
 import 'profile_page.dart';
 import 'services/cart_service.dart';
+import 'services/product_service.dart';
+import 'services/profile_service.dart';
 import 'services/wishlist_service.dart';
 import 'widgets/app_search_bar.dart';
 import 'widgets/bottom_nav_bar.dart';
 import 'widgets/category_card.dart';
 import 'widgets/featured_banner.dart';
+import 'widgets/initials_avatar.dart';
 import 'widgets/product_card.dart';
 import 'wishlist_page.dart';
-import 'package:jerseyapp/models/product.dart';
-import 'package:jerseyapp/services/product_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,10 +29,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ProductService _productService = ProductService();
+  final ProfileService _profileService = ProfileService();
   final CartService _cartService = CartService();
   final WishlistService _wishlistService = WishlistService();
   late final Stream<List<Product>> _productsStream = _productService
       .productsStream();
+  late final Stream<UserProfile> _profileStream = _profileService
+      .currentUserProfileStream();
   late final Stream<Set<String>> _wishlistProductIdsStream = _wishlistService
       .wishlistProductIdsStream();
 
@@ -61,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   List<Product> _filteredProducts(List<Product> products) {
+    final normalizedSearchQuery = _searchQuery.trim().toLowerCase();
     final filteredByCategory = _activeCategoryIndex == 0
         ? products
         : products
@@ -71,15 +78,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
               .toList();
-    if (_searchQuery.isEmpty) {
+    if (normalizedSearchQuery.isEmpty) {
       return filteredByCategory;
     }
-    return filteredByCategory
-        .where(
-          (product) =>
-              product.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-        )
-        .toList();
+    return filteredByCategory.where((product) {
+      final productName = product.name.toLowerCase();
+      final productCategory = product.category.toLowerCase();
+      return productName.contains(normalizedSearchQuery) ||
+          productCategory.contains(normalizedSearchQuery);
+    }).toList();
   }
 
   bool _categoryMatches(Product product, String categoryLabel) {
@@ -95,6 +102,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _formatPrice(double amount) {
     return '৳${amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2)}';
+  }
+
+  String _greetingFor(UserProfile? profile) {
+    final name = profile?.name.trim() ?? '';
+    return 'Hey ${name.isEmpty ? 'User' : name}';
   }
 
   void _setCategory(int index) {
@@ -166,203 +178,222 @@ class _HomeScreenState extends State<HomeScreen> {
         activeIndex: _activeTabIndex,
         onTap: _setActiveTab,
       ),
-      body: _activeTabIndex == 1
-          ? const CartPage()
-          : _activeTabIndex == 2
-          ? const WishlistPage()
-          : _activeTabIndex == 3
-          ? const ProfilePage()
-          : SafeArea(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  0,
-                  AppSpacing.lg,
-                  AppSpacing.md +
-                      kBottomNavigationBarHeight +
-                      MediaQuery.of(context).padding.bottom,
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: AppSpacing.xl),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hey, Jordan',
-                                style: AppTextStyles.headingLarge.copyWith(
-                                  color: AppColors.backgroundDark,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                'Welcome back to Jersey Drip',
-                                style: AppTextStyles.body.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        CircleAvatar(
-                          radius: 26,
-                          backgroundColor: AppColors.accent,
-                          child: Text(
-                            'J',
-                            style: AppTextStyles.headingMedium.copyWith(
-                              color: Colors.white,
-                              fontSize: 24,
+      body: IndexedStack(
+        index: _activeTabIndex,
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.md +
+                    kBottomNavigationBarHeight +
+                    MediaQuery.of(context).padding.bottom,
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: AppSpacing.xl),
+                  StreamBuilder<UserProfile>(
+                    stream: _profileStream,
+                    builder: (context, snapshot) {
+                      final profile = snapshot.data;
+
+                      return Row(
+                        children: [
+                          InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () => _setActiveTab(3),
+                            child: InitialsAvatar(
+                              name: profile?.name,
+                              size: 52,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    AppSearchBar(
-                      onChanged: (text) {
-                        setState(() {
-                          _searchQuery = text;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSectionHeader('Categories'),
-                    const SizedBox(height: AppSpacing.md),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final itemWidth = (constraints.maxWidth / 3.6).clamp(
-                          100.0,
-                          140.0,
-                        );
-                        return SizedBox(
-                          height: 142,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.only(
-                              left: AppSpacing.xs,
-                              right: AppSpacing.lg,
-                            ),
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _categories.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: AppSpacing.md),
-                            itemBuilder: (context, index) {
-                              final category = _categories[index];
-                              return SizedBox(
-                                width: itemWidth,
-                                child: GestureDetector(
-                                  onTap: () => _setCategory(index),
-                                  child: CategoryCard(
-                                    icon: category.icon,
-                                    label: category.label,
-                                    active: index == _activeCategoryIndex,
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _greetingFor(profile),
+                                  style: AppTextStyles.headingLarge.copyWith(
+                                    color: AppColors.backgroundDark,
                                   ),
                                 ),
-                              );
-                            },
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  'Welcome back to Jersey Drip',
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  AppSearchBar(
+                    onChanged: (text) {
+                      setState(() {
+                        _searchQuery = text;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  _buildSectionHeader('Categories'),
+                  const SizedBox(height: AppSpacing.md),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final itemWidth = (constraints.maxWidth / 3.6).clamp(
+                        100.0,
+                        140.0,
+                      );
+                      return SizedBox(
+                        height: 142,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.only(
+                            left: AppSpacing.xs,
+                            right: AppSpacing.lg,
+                          ),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _categories.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: AppSpacing.md),
+                          itemBuilder: (context, index) {
+                            final category = _categories[index];
+                            return SizedBox(
+                              width: itemWidth,
+                              child: GestureDetector(
+                                onTap: () => _setCategory(index),
+                                child: CategoryCard(
+                                  icon: category.icon,
+                                  label: category.label,
+                                  active: index == _activeCategoryIndex,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: const FeaturedBanner(),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  _buildSectionHeader('Top Products'),
+                  const SizedBox(height: AppSpacing.md),
+                  StreamBuilder<List<Product>>(
+                    stream: _productsStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Text(
+                          'Unable to load products',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textSecondary,
                           ),
                         );
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 280),
-                      child: const FeaturedBanner(),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSectionHeader('Top Products'),
-                    const SizedBox(height: AppSpacing.md),
-                    StreamBuilder<List<Product>>(
-                      stream: _productsStream,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return Text(
-                            'Unable to load products',
+                      }
+
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final filteredProducts = _filteredProducts(
+                        snapshot.data!,
+                      );
+
+                      if (filteredProducts.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: AppSpacing.xl,
+                          ),
+                          child: Text(
+                            _searchQuery.trim().isEmpty
+                                ? 'No products available'
+                                : 'No products match your search',
                             style: AppTextStyles.body.copyWith(
                               color: AppColors.textSecondary,
                             ),
-                          );
-                        }
-
-                        if (!snapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        final filteredProducts = _filteredProducts(
-                          snapshot.data!,
+                          ),
                         );
+                      }
 
-                        return StreamBuilder<Set<String>>(
-                          stream: _wishlistProductIdsStream,
-                          builder: (context, wishlistSnapshot) {
-                            final wishlistedProductIds =
-                                wishlistSnapshot.data ?? const <String>{};
+                      return StreamBuilder<Set<String>>(
+                        stream: _wishlistProductIdsStream,
+                        builder: (context, wishlistSnapshot) {
+                          final wishlistedProductIds =
+                              wishlistSnapshot.data ?? const <String>{};
 
-                            return LayoutBuilder(
-                              builder: (context, constraints) {
-                                final availableWidth = constraints.maxWidth;
-                                final maxItemWidth = availableWidth < 760
-                                    ? availableWidth / 2.1
-                                    : availableWidth < 1000
-                                    ? 240.0
-                                    : 270.0;
-                                final childAspectRatio = availableWidth >= 760
-                                    ? 0.7
-                                    : 0.62;
-                                return GridView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  padding: EdgeInsets.zero,
-                                  itemCount: filteredProducts.length,
-                                  gridDelegate:
-                                      SliverGridDelegateWithMaxCrossAxisExtent(
-                                        maxCrossAxisExtent: maxItemWidth,
-                                        mainAxisSpacing: AppSpacing.lg,
-                                        crossAxisSpacing: AppSpacing.lg,
-                                        childAspectRatio: childAspectRatio,
-                                      ),
-                                  itemBuilder: (context, index) {
-                                    final item = filteredProducts[index];
-                                    final isWishlisted = wishlistedProductIds
-                                        .contains(item.id);
+                          return LayoutBuilder(
+                            builder: (context, constraints) {
+                              final availableWidth = constraints.maxWidth;
+                              final maxItemWidth = availableWidth < 760
+                                  ? availableWidth / 2.1
+                                  : availableWidth < 1000
+                                  ? 240.0
+                                  : 270.0;
+                              final childAspectRatio = availableWidth >= 760
+                                  ? 0.7
+                                  : 0.62;
+                              return GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding: EdgeInsets.zero,
+                                itemCount: filteredProducts.length,
+                                gridDelegate:
+                                    SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: maxItemWidth,
+                                      mainAxisSpacing: AppSpacing.lg,
+                                      crossAxisSpacing: AppSpacing.lg,
+                                      childAspectRatio: childAspectRatio,
+                                    ),
+                                itemBuilder: (context, index) {
+                                  final item = filteredProducts[index];
+                                  final isWishlisted = wishlistedProductIds
+                                      .contains(item.id);
 
-                                    return GestureDetector(
-                                      key: ValueKey(item.id),
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => _openProductDetails(item),
-                                      child: ProductCard(
-                                        imagePath: item.imagePath,
-                                        name: item.name,
-                                        price: _formatPrice(
-                                          item.discountedPrice,
-                                        ),
-                                        originalPrice:
-                                            item.discountedPrice < item.price
-                                            ? _formatPrice(item.price)
-                                            : null,
-                                        wishlisted: isWishlisted,
-                                        onWishlistToggle: () =>
-                                            _toggleWishlist(item, isWishlisted),
-                                        onAddToCart: () => _addToCart(item),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                                  return GestureDetector(
+                                    key: ValueKey(item.id),
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _openProductDetails(item),
+                                    child: ProductCard(
+                                      imagePath: item.imagePath,
+                                      name: item.name,
+                                      price: _formatPrice(item.discountedPrice),
+                                      originalPrice:
+                                          item.discountedPrice < item.price
+                                          ? _formatPrice(item.price)
+                                          : null,
+                                      wishlisted: isWishlisted,
+                                      onWishlistToggle: () =>
+                                          _toggleWishlist(item, isWishlisted),
+                                      onAddToCart: () => _addToCart(item),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
+          ),
+          const CartPage(),
+          const WishlistPage(),
+          const ProfilePage(),
+        ],
+      ),
     );
   }
 }

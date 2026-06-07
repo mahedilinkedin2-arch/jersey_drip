@@ -1,27 +1,20 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:jerseyapp/main.dart';
+import 'package:jerseyapp/widgets/initials_avatar.dart';
 
 void main() {
-  testWidgets('App loads HomeScreen', (WidgetTester tester) async {
+  testWidgets('App loads splash screen', (WidgetTester tester) async {
     await tester.pumpWidget(const JerseyDripApp());
-    await tester.pumpAndSettle();
 
-    expect(find.text('Welcome 👋'), findsOneWidget);
+    expect(find.text('Jersey Drip'), findsOneWidget);
   });
 
-  testWidgets('Firestore button exists', (WidgetTester tester) async {
-    await tester.pumpWidget(const JerseyDripApp());
-    await tester.pumpAndSettle();
-
-    expect(find.text('Send Test Data to Firestore'), findsOneWidget);
-  });
-
-  testWidgets('Logout button exists', (WidgetTester tester) async {
-    await tester.pumpWidget(const JerseyDripApp());
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.logout), findsOneWidget);
+  test('initials are generated from profile names', () {
+    expect(initialsFromName('Anik'), 'A');
+    expect(initialsFromName('Anik Rahman'), 'AR');
+    expect(initialsFromName('John Doe'), 'JD');
+    expect(initialsFromName(null), 'U');
+    expect(initialsFromName('   '), 'U');
   });
 }

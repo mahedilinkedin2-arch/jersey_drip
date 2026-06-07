@@ -10,6 +10,7 @@ import 'models/user_profile.dart';
 import 'orders_page.dart';
 import 'services/auth_service.dart';
 import 'services/profile_service.dart';
+import 'widgets/initials_avatar.dart';
 import 'wishlist_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -73,14 +74,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  String _initialFor(UserProfile profile) {
-    final name = profile.name.trim();
-    if (name.isNotEmpty) return name.substring(0, 1).toUpperCase();
-    final email = FirebaseAuth.instance.currentUser?.email ?? profile.email;
-    if (email.isNotEmpty) return email.substring(0, 1).toUpperCase();
-    return 'J';
-  }
-
   String _valueOrEmpty(String value) {
     final trimmed = value.trim();
     return trimmed.isEmpty ? 'Not added yet' : trimmed;
@@ -131,7 +124,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     _ProfileSummary(
-                      initial: _initialFor(profile),
+                      nameInitialsSource: profile.name,
                       name: _valueOrEmpty(profile.name),
                       email: authEmail,
                       phoneNumber: _valueOrEmpty(profile.phoneNumber),
@@ -178,13 +171,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
 class _ProfileSummary extends StatelessWidget {
   const _ProfileSummary({
-    required this.initial,
+    required this.nameInitialsSource,
     required this.name,
     required this.email,
     required this.phoneNumber,
   });
 
-  final String initial;
+  final String nameInitialsSource;
   final String name;
   final String email;
   final String phoneNumber;
@@ -194,41 +187,25 @@ class _ProfileSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: _sectionDecoration(),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          CircleAvatar(
-            radius: 38,
-            backgroundColor: AppColors.accent,
-            child: Text(
-              initial,
-              style: AppTextStyles.headingLarge.copyWith(
-                color: Colors.white,
-                fontSize: 32,
-              ),
+          InitialsAvatar(name: nameInitialsSource, size: 88),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.headingMedium.copyWith(
+              color: AppColors.backgroundDark,
+              fontSize: 22,
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.headingMedium.copyWith(
-                    color: AppColors.backgroundDark,
-                    fontSize: 22,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                _InlineValue(icon: Icons.mail_outline, text: email),
-                const SizedBox(height: AppSpacing.xs),
-                _InlineValue(icon: Icons.phone_outlined, text: phoneNumber),
-              ],
-            ),
-          ),
+          const SizedBox(height: AppSpacing.sm),
+          _InlineValue(icon: Icons.mail_outline, text: email),
+          const SizedBox(height: AppSpacing.xs),
+          _InlineValue(icon: Icons.phone_outlined, text: phoneNumber),
         ],
       ),
     );
