@@ -82,6 +82,7 @@ class AuthService {
       'uid': user.uid,
       'name': name ?? user.displayName ?? 'New User',
       'email': user.email ?? '',
+      'role': 'user',
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

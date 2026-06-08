@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/admin_dashboard_stats.dart';
 import '../models/order.dart';
@@ -34,3 +35,23 @@ final usersProvider = StreamProvider<List<UserProfile>>((ref) {
 final roleProvider = StreamProvider<UserRole>((ref) {
   return ref.read(roleServiceProvider).watchRole();
 });
+
+final adminDebugLogsProvider =
+    StateNotifierProvider<AdminDebugLogNotifier, List<String>>(
+      (ref) => AdminDebugLogNotifier(),
+    );
+
+class AdminDebugLogNotifier extends StateNotifier<List<String>> {
+  AdminDebugLogNotifier() : super([]);
+
+  void add(String message) {
+    final stamp = DateTime.now().toIso8601String();
+    final logEntry = '[$stamp] $message';
+    final next = [...state, logEntry];
+    state = next.length > 30 ? next.sublist(next.length - 30) : next;
+  }
+
+  void clear() {
+    state = [];
+  }
+}

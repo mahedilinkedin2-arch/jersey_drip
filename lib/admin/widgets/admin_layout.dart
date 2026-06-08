@@ -29,15 +29,28 @@ class AdminLayout extends StatelessWidget {
             NavigationRail(
               selectedIndex: index,
               onDestinationSelected: onTap,
+              labelType: NavigationRailLabelType.all,
               destinations: const [
                 NavigationRailDestination(
-                    icon: Icon(Icons.dashboard), label: Text("Dashboard")),
+                  icon: Icon(Icons.dashboard),
+                  label: Text("Dashboard"),
+                ),
                 NavigationRailDestination(
-                    icon: Icon(Icons.inventory), label: Text("Products")),
+                  icon: Icon(Icons.inventory),
+                  label: Text("Products"),
+                ),
                 NavigationRailDestination(
-                    icon: Icon(Icons.list), label: Text("Orders")),
+                  icon: Icon(Icons.list),
+                  label: Text("Orders"),
+                ),
                 NavigationRailDestination(
-                    icon: Icon(Icons.people), label: Text("Users")),
+                  icon: Icon(Icons.view_list),
+                  label: Text("Inventory"),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.people),
+                  label: Text("Users"),
+                ),
               ],
             ),
           Expanded(child: body),
@@ -49,13 +62,25 @@ class AdminLayout extends StatelessWidget {
               onTap: onTap,
               items: const [
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.dashboard), label: "Dash"),
+                  icon: Icon(Icons.dashboard),
+                  label: "Dashboard",
+                ),
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.inventory), label: "Products"),
+                  icon: Icon(Icons.inventory),
+                  label: "Products",
+                ),
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.list), label: "Orders"),
+                  icon: Icon(Icons.list),
+                  label: "Orders",
+                ),
                 BottomNavigationBarItem(
-                    icon: Icon(Icons.people), label: "Users"),
+                  icon: Icon(Icons.view_list),
+                  label: "Inventory",
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.people),
+                  label: "Users",
+                ),
               ],
             )
           : null,

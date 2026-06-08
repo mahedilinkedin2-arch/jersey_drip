@@ -11,7 +11,6 @@ class ProductCard extends StatelessWidget {
     required this.imagePath,
     required this.name,
     required this.price,
-    this.originalPrice,
     required this.wishlisted,
     required this.onWishlistToggle,
     this.available = true,
@@ -21,7 +20,6 @@ class ProductCard extends StatelessWidget {
   final String imagePath;
   final String name;
   final String price;
-  final String? originalPrice;
   final bool wishlisted;
   final bool available;
   final VoidCallback onWishlistToggle;
@@ -242,18 +240,6 @@ class ProductCard extends StatelessWidget {
                               color: AppColors.backgroundDark,
                             ),
                           ),
-                          if (originalPrice != null) ...[
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              originalPrice!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.textSecondary,
-                                decoration: TextDecoration.lineThrough,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),

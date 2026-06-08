@@ -7,8 +7,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      let userRole = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
       return signedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && userRole is string
+        && userRole.toLowerCase() in ['admin', 'superadmin'];
     }
 
     function ownsSession() {

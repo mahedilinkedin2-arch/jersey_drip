@@ -373,10 +373,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                       imagePath: item.imagePath,
                                       name: item.name,
                                       price: _formatPrice(item.discountedPrice),
-                                      originalPrice:
-                                          item.discountedPrice < item.price
-                                          ? _formatPrice(item.price)
-                                          : null,
                                       wishlisted: isWishlisted,
                                       available: item.isAvailable,
                                       onWishlistToggle: () =>

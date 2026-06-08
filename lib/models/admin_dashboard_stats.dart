@@ -3,7 +3,6 @@ class AdminDashboardStats {
   final int totalOrders;
   final int deliveredOrders;
   final double totalRevenue;
-  final int lowStockCount;
   final int outOfStockCount;
   final int totalUsers;
 
@@ -12,7 +11,6 @@ class AdminDashboardStats {
     required this.totalOrders,
     required this.deliveredOrders,
     required this.totalRevenue,
-    required this.lowStockCount,
     required this.outOfStockCount,
     required this.totalUsers,
   });

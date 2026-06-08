@@ -1,12 +1,13 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../models/order.dart';
 import '../../providers/admin_provider.dart';
-import 'admin_order_detail.dart';
 
 class AdminDashboard extends ConsumerWidget {
   const AdminDashboard({super.key, required this.onNavigate});
@@ -16,7 +17,11 @@ class AdminDashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardAsync = ref.watch(dashboardProvider);
-    final recentOrdersAsync = ref.watch(recentOrdersProvider);
+    final currencyFormat = NumberFormat.currency(
+      symbol: '৳',
+      decimalDigits: 0,
+      locale: 'en_US',
+    );
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -28,80 +33,60 @@ class AdminDashboard extends ConsumerWidget {
               children: [
                 Text('Store overview', style: AppTextStyles.headingMedium),
                 const SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    _DashboardCard(
-                      title: 'Revenue',
-                      value: '\$${stats.totalRevenue.toStringAsFixed(2)}',
-                      onTap: () => onNavigate(1),
-                    ),
-                    _DashboardCard(
-                      title: 'Orders',
-                      value: stats.totalOrders.toString(),
-                      onTap: () => onNavigate(1),
-                    ),
-                    _DashboardCard(
-                      title: 'Delivered',
-                      value: stats.deliveredOrders.toString(),
-                      onTap: () => onNavigate(1),
-                    ),
-                    _DashboardCard(
-                      title: 'Products',
-                      value: stats.totalProducts.toString(),
-                      onTap: () => onNavigate(2),
-                    ),
-                    _DashboardCard(
-                      title: 'Low Stock',
-                      value: stats.lowStockCount.toString(),
-                      onTap: () => onNavigate(3),
-                    ),
-                    _DashboardCard(
-                      title: 'Out Of Stock',
-                      value: stats.outOfStockCount.toString(),
-                      onTap: () => onNavigate(3),
-                    ),
-                    _DashboardCard(
-                      title: 'Users',
-                      value: stats.totalUsers.toString(),
-                      onTap: () => onNavigate(4),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Latest orders', style: AppTextStyles.headingMedium),
-                    TextButton(
-                      onPressed: () => onNavigate(1),
-                      child: const Text('View all orders'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                recentOrdersAsync.when(
-                  data: (orders) {
-                    if (orders.isEmpty) {
-                      return const Text('No recent orders to display.');
-                    }
-                    return Column(
-                      children: orders
-                          .map((order) {
-                            return _RecentOrderTile(order: order);
-                          })
-                          .toList(growable: false),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columnCount = (constraints.maxWidth / 240)
+                        .floor()
+                        .clamp(1, 4);
+                    final cardWidth = min(
+                      (constraints.maxWidth -
+                              (columnCount - 1) * AppSpacing.sm) /
+                          columnCount,
+                      280.0,
+                    );
+                    final cards = [
+                      _DashboardCard(
+                        title: 'Revenue',
+                        value: currencyFormat.format(stats.totalRevenue),
+                        onTap: null,
+                      ),
+                      _DashboardCard(
+                        title: 'Orders',
+                        value: stats.totalOrders.toString(),
+                        onTap: () => onNavigate(1),
+                      ),
+                      _DashboardCard(
+                        title: 'Delivered',
+                        value: stats.deliveredOrders.toString(),
+                        onTap: () => onNavigate(1),
+                      ),
+                      _DashboardCard(
+                        title: 'Products',
+                        value: stats.totalProducts.toString(),
+                        onTap: () => onNavigate(2),
+                      ),
+                      _DashboardCard(
+                        title: 'Out of stock',
+                        value: stats.outOfStockCount.toString(),
+                        onTap: () => onNavigate(3),
+                      ),
+                      _DashboardCard(
+                        title: 'Users',
+                        value: stats.totalUsers.toString(),
+                        onTap: () => onNavigate(4),
+                      ),
+                    ];
+
+                    return Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: cards
+                          .map(
+                            (card) => SizedBox(width: cardWidth, child: card),
+                          )
+                          .toList(),
                     );
                   },
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, _) => Text(
-                    'Unable to load latest orders: ${error.toString()}',
-                    style: AppTextStyles.body,
-                  ),
                 ),
               ],
             ),
@@ -121,33 +106,31 @@ class AdminDashboard extends ConsumerWidget {
 }
 
 class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({
-    required this.title,
-    required this.value,
-    required this.onTap,
-  });
+  const _DashboardCard({required this.title, required this.value, this.onTap});
 
   final String title;
   final String value;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: SizedBox(
+            height: 150,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
                   title,
+                  textAlign: TextAlign.center,
                   style: AppTextStyles.label.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -155,54 +138,13 @@ class _DashboardCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   value,
-                  style: AppTextStyles.headingMedium.copyWith(fontSize: 24),
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.headingMedium.copyWith(fontSize: 26),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _RecentOrderTile extends StatelessWidget {
-  const _RecentOrderTile({required this.order});
-
-  final AppOrder order;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        title: Text(
-          order.orderId,
-          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Text('${order.paymentStatus} • ${order.status}'),
-        trailing: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '\$${order.totalPrice}',
-              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '${order.createdAt.toLocal()}'.split(' ').first,
-              style: AppTextStyles.label,
-            ),
-          ],
-        ),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => AdminOrderDetail(order: order)),
-          );
-        },
       ),
     );
   }

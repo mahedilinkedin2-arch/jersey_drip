@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
@@ -77,14 +79,13 @@ class ProductService {
       fallbackPrice: price.round(),
       fallbackStock: stockQuantity,
     );
-    final originalPrice = _readNullableDouble(
-      _readFirstValue(data, const [
-        'originalPrice',
-        'originalprice',
-        'original_price',
-        'original price',
-      ]),
-    );
+    final minSizePrice = sizes.isNotEmpty
+        ? sizes.values.map((variant) => variant.price).reduce(min)
+        : price.round();
+    final displayDiscountedPrice = sizes.isNotEmpty
+        ? minSizePrice.toDouble()
+        : price;
+    final displayPrice = price;
     final imagePath = _normalizeImagePath(
       _readFirstValue(data, const [
         'imagePath',
@@ -111,8 +112,8 @@ class ProductService {
       id: documentId,
       name: _readString(data['name'], fallback: 'Unnamed Product'),
       description: _readString(data['description']),
-      price: originalPrice ?? price,
-      discountedPrice: price,
+      price: displayPrice,
+      discountedPrice: displayDiscountedPrice,
       category: _normalizeCategory(data['category']),
       brand: _readString(data['brand']),
       imagePath: imagePath,
@@ -192,13 +193,6 @@ class ProductService {
       return value.toDouble();
     }
     return fallback;
-  }
-
-  double? _readNullableDouble(Object? value) {
-    if (value is num) {
-      return value.toDouble();
-    }
-    return null;
   }
 
   Map<String, SizeVariant> _readSizeVariants(

@@ -91,7 +91,7 @@ class Product {
   }
 
   SizeVariant? variantForSize(String size) => sizes[size];
-
+  String get imageUrl => imagePath;
   SizeVariant get defaultVariant {
     if (sizes.isEmpty) {
       return SizeVariant(price: discountedPrice.round(), stock: stockQuantity);

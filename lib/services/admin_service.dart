@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/admin_dashboard_stats.dart';
@@ -15,14 +17,20 @@ class AdminService {
   final ProductService _productService = ProductService();
 
   Stream<AdminDashboardStats> getDashboardStatsStream() {
-    final orderSnapshots = _db.collection('orders').snapshots();
-    final productSnapshots = _db.collection('products').snapshots();
-    final userSnapshots = _db.collection('users').snapshots();
+    final Stream<QuerySnapshot<Map<String, dynamic>>> orderSnapshots = _db
+        .collection('orders')
+        .snapshots();
+    final Stream<QuerySnapshot<Map<String, dynamic>>> productSnapshots = _db
+        .collection('products')
+        .snapshots();
+    final Stream<QuerySnapshot<Map<String, dynamic>>> userSnapshots = _db
+        .collection('users')
+        .snapshots();
 
     return Stream.multi((controller) {
-      QuerySnapshot? latestOrders;
-      QuerySnapshot? latestProducts;
-      QuerySnapshot? latestUsers;
+      QuerySnapshot<Map<String, dynamic>>? latestOrders;
+      QuerySnapshot<Map<String, dynamic>>? latestProducts;
+      QuerySnapshot<Map<String, dynamic>>? latestUsers;
 
       late final StreamSubscription<QuerySnapshot> orderSub;
       late final StreamSubscription<QuerySnapshot> productSub;
@@ -122,8 +130,40 @@ class AdminService {
     await document.update(data);
   }
 
+  Future<String> uploadProductImage(File image) async {
+    final fileName = image.path.split('/').last;
+    final storagePath =
+        'products/$fileName-${DateTime.now().millisecondsSinceEpoch}';
+    final ref = FirebaseStorage.instance.ref(storagePath);
+    final uploadTask = ref.putFile(image);
+    final snapshot = await uploadTask;
+    return await snapshot.ref.getDownloadURL();
+  }
+
   Future<void> deleteProduct(String productId) async {
-    await _db.collection('products').doc(productId).delete();
+    final document = _db.collection('products').doc(productId);
+    final cartSnapshot = await _db
+        .collectionGroup('cart')
+        .where('productId', isEqualTo: productId)
+        .get();
+    final wishlistSnapshot = await _db
+        .collectionGroup('wishlist')
+        .where('productId', isEqualTo: productId)
+        .get();
+
+    final deletions = <DocumentReference<Map<String, dynamic>>>[document];
+    deletions.addAll(cartSnapshot.docs.map((doc) => doc.reference));
+    deletions.addAll(wishlistSnapshot.docs.map((doc) => doc.reference));
+
+    const batchLimit = 500;
+    for (var start = 0; start < deletions.length; start += batchLimit) {
+      final batch = _db.batch();
+      final end = (start + batchLimit).clamp(0, deletions.length);
+      for (final reference in deletions.sublist(start, end)) {
+        batch.delete(reference);
+      }
+      await batch.commit();
+    }
   }
 
   Future<void> updateProductActive(String productId, bool isActive) async {
@@ -143,7 +183,7 @@ class AdminService {
       throw StateError('Product not found');
     }
 
-    final data = snapshot.data() as Map<String, dynamic>? ?? {};
+    final data = snapshot.data() ?? {};
     final rawSizes = data['sizes'];
     if (rawSizes is! Map) {
       throw StateError('Product sizes are not available');
@@ -164,35 +204,61 @@ class AdminService {
   }
 
   Future<void> updateUserRole(String uid, String role) async {
-    await _db.collection('users').doc(uid).update({'role': role});
+    final normalizedRole = role.toLowerCase();
+    final userRef = _db.collection('users').doc(uid);
+    final snapshot = await userRef.get();
+
+    if (!snapshot.exists) {
+      throw StateError('User not found');
+    }
+
+    final currentRole =
+        (snapshot.data()?['role'] as String?)?.toLowerCase() ?? 'user';
+    final adminRoles = ['admin', 'superadmin'];
+    final isCurrentAdmin = adminRoles.contains(currentRole);
+    final willBeAdmin = adminRoles.contains(normalizedRole);
+
+    if (isCurrentAdmin && !willBeAdmin) {
+      final adminSnapshot = await _db
+          .collection('users')
+          .where('role', whereIn: adminRoles)
+          .get();
+      final remainingAdmins = adminSnapshot.docs
+          .where((doc) => doc.id != uid)
+          .where((doc) {
+            final roleValue =
+                (doc.data()['role'] as String?)?.toLowerCase() ?? '';
+            return adminRoles.contains(roleValue);
+          })
+          .length;
+
+      if (remainingAdmins == 0) {
+        throw StateError('Cannot remove the last admin from the system.');
+      }
+    }
+
+    await userRef.update({'role': normalizedRole});
   }
 
   AdminDashboardStats _computeStats(
-    QuerySnapshot orderSnap,
-    QuerySnapshot productSnap,
-    QuerySnapshot userSnap,
+    QuerySnapshot<Map<String, dynamic>> orderSnap,
+    QuerySnapshot<Map<String, dynamic>> productSnap,
+    QuerySnapshot<Map<String, dynamic>> userSnap,
   ) {
     int totalProducts = 0;
-    int totalOrders = orderSnap.docs.length;
+    int totalOrders = 0;
     int deliveredOrders = 0;
     double totalRevenue = 0;
-    int lowStockCount = 0;
     int outOfStockCount = 0;
     int totalUsers = userSnap.docs.length;
 
     for (var doc in orderSnap.docs) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final data = doc.data();
       final status = (data['status'] ?? '').toString().toLowerCase();
-      final paymentStatus = (data['paymentStatus'] ?? '')
-          .toString()
-          .toLowerCase();
       final totalPrice = data['totalPrice'];
 
       if (status == 'delivered') {
         deliveredOrders++;
-      }
-
-      if (paymentStatus == 'paid') {
         if (totalPrice is int) {
           totalRevenue += totalPrice.toDouble();
         } else if (totalPrice is double) {
@@ -200,11 +266,13 @@ class AdminService {
         } else if (totalPrice is String) {
           totalRevenue += double.tryParse(totalPrice) ?? 0;
         }
+      } else {
+        totalOrders++;
       }
     }
 
     for (var doc in productSnap.docs) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final data = doc.data();
       final isActive = data['isActive'];
       if (isActive is bool && !isActive) {
         continue;
@@ -213,10 +281,9 @@ class AdminService {
       totalProducts++;
       final sizes = data['sizes'] as Map<String, dynamic>?;
       int totalStock = 0;
-      bool hasSizes = false;
-      bool allSizesEmpty = true;
+      final hasSizes = sizes != null;
 
-      if (sizes != null) {
+      if (hasSizes) {
         for (var sizeEntry in sizes.entries) {
           final sizeData = sizeEntry.value as Map<String, dynamic>? ?? {};
           final rawStock = sizeData['stock'];
@@ -225,28 +292,21 @@ class AdminService {
               : rawStock is double
               ? rawStock.toInt()
               : int.tryParse(rawStock?.toString() ?? '') ?? 0;
-          hasSizes = true;
           totalStock += stock;
-          if (stock > 0) {
-            allSizesEmpty = false;
+          if (stock == 0) {
+            outOfStockCount++;
           }
         }
-      }
-
-      if (!hasSizes) {
+      } else {
         final rawQuantity = data['quantity'];
         totalStock = rawQuantity is int
             ? rawQuantity
             : rawQuantity is double
             ? rawQuantity.toInt()
             : int.tryParse(rawQuantity?.toString() ?? '') ?? 0;
-        allSizesEmpty = totalStock <= 0;
-      }
-
-      if (allSizesEmpty) {
-        outOfStockCount++;
-      } else if (totalStock <= 5) {
-        lowStockCount++;
+        if (totalStock == 0) {
+          outOfStockCount++;
+        }
       }
     }
 
@@ -259,7 +319,6 @@ class AdminService {
           'totalOrders': totalOrders,
           'deliveredOrders': deliveredOrders,
           'totalRevenue': totalRevenue,
-          'lowStockCount': lowStockCount,
           'outOfStockCount': outOfStockCount,
           'totalUsers': totalUsers,
         },
@@ -271,7 +330,6 @@ class AdminService {
       totalOrders: totalOrders,
       deliveredOrders: deliveredOrders,
       totalRevenue: totalRevenue,
-      lowStockCount: lowStockCount,
       outOfStockCount: outOfStockCount,
       totalUsers: totalUsers,
     );

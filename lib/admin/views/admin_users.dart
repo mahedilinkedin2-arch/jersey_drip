@@ -86,7 +86,12 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
                       const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (context, index) {
                     final user = filtered[index];
+                    final role = user.role.toLowerCase();
+                    final isAdmin = role == 'admin' || role == 'superadmin';
                     final canChange = _canChangeRole(user, currentUid);
+                    final targetRole = isAdmin ? 'user' : 'admin';
+                    final actionLabel = isAdmin ? 'Set user' : 'Promote admin';
+
                     return Card(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -122,10 +127,9 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
                                 Container(
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(10),
-                                    color: user.role.toLowerCase() == 'admin'
+                                    color: role == 'admin'
                                         ? AppColors.accentSoft
-                                        : user.role.toLowerCase() ==
-                                              'superadmin'
+                                        : role == 'superadmin'
                                         ? AppColors.success.withAlpha(38)
                                         : AppColors.backgroundLight,
                                   ),
@@ -141,21 +145,11 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
                                   ),
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: canChange && !_saving
-                                          ? () => _changeRole(user, 'admin')
-                                          : null,
-                                      child: const Text('Promote'),
-                                    ),
-                                    TextButton(
-                                      onPressed: canChange && !_saving
-                                          ? () => _changeRole(user, 'user')
-                                          : null,
-                                      child: const Text('Demote'),
-                                    ),
-                                  ],
+                                TextButton(
+                                  onPressed: canChange && !_saving
+                                      ? () => _changeRole(user, targetRole)
+                                      : null,
+                                  child: Text(actionLabel),
                                 ),
                               ],
                             ),
@@ -181,6 +175,16 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
   }
 
   Future<void> _changeRole(UserProfile user, String targetRole) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
+    final roleValue = ref
+        .read(roleProvider)
+        .maybeWhen(data: (role) => role.name, orElse: () => 'unknown');
+    final isAdmin = roleValue == 'admin' || roleValue == 'superadmin';
+    ref
+        .read(adminDebugLogsProvider.notifier)
+        .add(
+          'Role change requested for ${user.uid} to $targetRole by uid=$uid role=$roleValue isAdmin=$isAdmin',
+        );
     setState(() => _saving = true);
     try {
       await ref.read(adminServiceProvider).updateUserRole(user.uid, targetRole);
@@ -190,6 +194,9 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
         ).showSnackBar(SnackBar(content: Text('Role updated to $targetRole.')));
       }
     } catch (error) {
+      ref
+          .read(adminDebugLogsProvider.notifier)
+          .add('Role update failed: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to update role: $error')),

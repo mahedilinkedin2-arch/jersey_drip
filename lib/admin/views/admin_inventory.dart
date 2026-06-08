@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,7 +7,6 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/product.dart';
 import '../../providers/admin_provider.dart';
-import '../../services/admin_service.dart';
 
 class AdminInventory extends ConsumerStatefulWidget {
   const AdminInventory({super.key});
@@ -47,7 +47,7 @@ class _AdminInventoryState extends ConsumerState<AdminInventory> {
           Text('Inventory management', style: AppTextStyles.headingMedium),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'View and update stock per product size with low-stock filters.',
+            'View and update stock across products and focus on out-of-stock variants.',
             style: AppTextStyles.body,
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -59,11 +59,6 @@ class _AdminInventoryState extends ConsumerState<AdminInventory> {
                 label: 'All',
                 selected: _filter == 'all',
                 onTap: () => setState(() => _filter = 'all'),
-              ),
-              _FilterChip(
-                label: 'Low stock',
-                selected: _filter == 'low',
-                onTap: () => setState(() => _filter = 'low'),
               ),
               _FilterChip(
                 label: 'Out of stock',
@@ -150,6 +145,26 @@ class _AdminInventoryState extends ConsumerState<AdminInventory> {
                                           ) ??
                                           row.stock;
                                       if (value == row.stock) return;
+                                      final uid =
+                                          FirebaseAuth
+                                              .instance
+                                              .currentUser
+                                              ?.uid ??
+                                          'unknown';
+                                      final roleValue = ref
+                                          .read(roleProvider)
+                                          .maybeWhen(
+                                            data: (role) => role.name,
+                                            orElse: () => 'unknown',
+                                          );
+                                      final isAdmin =
+                                          roleValue == 'admin' ||
+                                          roleValue == 'superadmin';
+                                      ref
+                                          .read(adminDebugLogsProvider.notifier)
+                                          .add(
+                                            'Stock update requested for ${row.productId} size=${row.size} to $value by uid=$uid role=$roleValue isAdmin=$isAdmin',
+                                          );
                                       setState(() => _saving = true);
                                       try {
                                         await ref
@@ -171,6 +186,11 @@ class _AdminInventoryState extends ConsumerState<AdminInventory> {
                                           );
                                         }
                                       } catch (error) {
+                                        ref
+                                            .read(
+                                              adminDebugLogsProvider.notifier,
+                                            )
+                                            .add('Stock update failed: $error');
                                         if (mounted) {
                                           ScaffoldMessenger.of(
                                             context,
@@ -230,7 +250,6 @@ class _AdminInventoryState extends ConsumerState<AdminInventory> {
           stock: stock,
         );
 
-        if (_filter == 'low' && stock > 5) continue;
         if (_filter == 'out' && stock > 0) continue;
         rows.add(row);
       }

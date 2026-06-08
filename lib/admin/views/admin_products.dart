@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,7 +44,7 @@ class _AdminProductsState extends ConsumerState<AdminProducts> {
                     Text('Product catalog', style: AppTextStyles.headingMedium),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Create, edit, disable, or remove products from your store.',
+                      'Create or remove products from your store. Editing and toggling active state is not available in this admin flow.',
                       style: AppTextStyles.body,
                     ),
                   ],
@@ -99,21 +100,20 @@ class _AdminProductsState extends ConsumerState<AdminProducts> {
                       const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (context, index) {
                     final product = filtered[index];
+                    final minPrice = product.sizes.isNotEmpty
+                        ? product.sizes.values
+                              .map((variant) => variant.price)
+                              .reduce((a, b) => a < b ? a : b)
+                        : 0;
                     final totalStock = product.sizes.values.fold<int>(
                       0,
                       (sum, variant) => sum + variant.stock,
                     );
-                    return Card(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 1,
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        child: Row(
-                          children: [
-                            if (product.imagePath.isNotEmpty)
-                              ClipRRect(
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow = constraints.maxWidth < 560;
+                        final productImage = product.imagePath.isNotEmpty
+                            ? ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: Image.network(
                                   product.imagePath,
@@ -129,223 +129,190 @@ class _AdminProductsState extends ConsumerState<AdminProducts> {
                                     ),
                                   ),
                                 ),
+                              )
+                            : const SizedBox.shrink();
+
+                        final productDetails = Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                product.name,
+                                style: AppTextStyles.body.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            const SizedBox(width: AppSpacing.md),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    product.name,
-                                    style: AppTextStyles.body.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: AppSpacing.xs),
-                                  Text(
-                                    product.category,
-                                    style: AppTextStyles.label,
-                                  ),
-                                  const SizedBox(height: AppSpacing.xs),
-                                  Text(
-                                    'Price: \$${product.discountedPrice.toStringAsFixed(0)}',
-                                    style: AppTextStyles.body,
-                                  ),
-                                  Text(
-                                    'Stock: $totalStock',
-                                    style: AppTextStyles.body,
-                                  ),
-                                ],
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                product.category,
+                                style: AppTextStyles.label,
                               ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Price from: ৳$minPrice',
+                                style: AppTextStyles.body,
+                              ),
+                              Text(
+                                'Stock: $totalStock',
+                                style: AppTextStyles.body,
+                              ),
+                            ],
+                          ),
+                        );
+
+                        final actionButtons = Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        AdminProductDetail(product: product),
+                                  ),
+                                );
+                              },
+                              child: const Text('View'),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    color: product.isActive
-                                        ? AppColors.success.withAlpha(38)
-                                        : AppColors.error.withAlpha(38),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.sm,
-                                    vertical: AppSpacing.xs,
-                                  ),
-                                  child: Text(
-                                    product.isActive ? 'Active' : 'Disabled',
-                                    style: AppTextStyles.label.copyWith(
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: AppSpacing.sm),
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => AdminProductDetail(
-                                              product: product,
-                                            ),
+                            TextButton(
+                              onPressed: _saving
+                                  ? null
+                                  : () async {
+                                      final uid =
+                                          FirebaseAuth
+                                              .instance
+                                              .currentUser
+                                              ?.uid ??
+                                          'unknown';
+                                      final roleValue = ref
+                                          .read(roleProvider)
+                                          .maybeWhen(
+                                            data: (role) => role.name,
+                                            orElse: () => 'unknown',
+                                          );
+                                      final isAdmin =
+                                          roleValue == 'admin' ||
+                                          roleValue == 'superadmin';
+                                      ref
+                                          .read(adminDebugLogsProvider.notifier)
+                                          .add(
+                                            'Delete requested for product ${product.id} by uid=$uid role=$roleValue isAdmin=$isAdmin',
+                                          );
+                                      final confirmed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (_) => AlertDialog(
+                                          title: const Text('Delete product?'),
+                                          content: const Text(
+                                            'This action cannot be undone.',
                                           ),
-                                        );
-                                      },
-                                      child: const Text('View'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => AdminProductForm(
-                                              product: product,
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.of(
+                                                context,
+                                              ).pop(false),
+                                              child: const Text('Cancel'),
                                             ),
-                                          ),
-                                        );
-                                      },
-                                      child: const Text('Edit'),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    TextButton(
-                                      onPressed: _saving
-                                          ? null
-                                          : () async {
-                                              setState(() => _saving = true);
-                                              try {
-                                                await ref
-                                                    .read(adminServiceProvider)
-                                                    .updateProductActive(
-                                                      product.id,
-                                                      !product.isActive,
-                                                    );
-                                                if (mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        product.isActive
-                                                            ? 'Product disabled.'
-                                                            : 'Product enabled.',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              } catch (error) {
-                                                if (mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        'Unable to update active state: $error',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              } finally {
-                                                if (mounted)
-                                                  setState(
-                                                    () => _saving = false,
-                                                  );
-                                              }
-                                            },
-                                      child: Text(
-                                        product.isActive ? 'Disable' : 'Enable',
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: _saving
-                                          ? null
-                                          : () async {
-                                              final confirmed =
-                                                  await showDialog<bool>(
-                                                    context: context,
-                                                    builder: (_) => AlertDialog(
-                                                      title: const Text(
-                                                        'Delete product?',
-                                                      ),
-                                                      content: const Text(
-                                                        'This action cannot be undone.',
-                                                      ),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed: () =>
-                                                              Navigator.of(
-                                                                context,
-                                                              ).pop(false),
-                                                          child: const Text(
-                                                            'Cancel',
-                                                          ),
-                                                        ),
-                                                        TextButton(
-                                                          onPressed: () =>
-                                                              Navigator.of(
-                                                                context,
-                                                              ).pop(true),
-                                                          child: const Text(
-                                                            'Delete',
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-                                              if (confirmed != true) return;
-                                              setState(() => _saving = true);
-                                              try {
-                                                await ref
-                                                    .read(adminServiceProvider)
-                                                    .deleteProduct(product.id);
-                                                if (mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'Product deleted.',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              } catch (error) {
-                                                if (mounted) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        'Unable to delete product: $error',
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              } finally {
-                                                if (mounted)
-                                                  setState(
-                                                    () => _saving = false,
-                                                  );
-                                              }
-                                            },
-                                      child: const Text(
-                                        'Delete',
-                                        style: TextStyle(
-                                          color: AppColors.error,
+                                            TextButton(
+                                              onPressed: () => Navigator.of(
+                                                context,
+                                              ).pop(true),
+                                              child: const Text('Delete'),
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                      );
+                                      if (confirmed != true) return;
+                                      setState(() => _saving = true);
+                                      try {
+                                        await ref
+                                            .read(adminServiceProvider)
+                                            .deleteProduct(product.id);
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Product deleted.'),
+                                            ),
+                                          );
+                                        }
+                                      } catch (error) {
+                                        ref
+                                            .read(
+                                              adminDebugLogsProvider.notifier,
+                                            )
+                                            .add(
+                                              'Product delete failed: $error',
+                                            );
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Unable to delete product: $error',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } finally {
+                                        if (mounted)
+                                          setState(() => _saving = false);
+                                      }
+                                    },
+                              child: const Text(
+                                'Delete',
+                                style: TextStyle(color: AppColors.error),
+                              ),
                             ),
                           ],
-                        ),
-                      ),
+                        );
+
+                        return Card(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 1,
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            child: isNarrow
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          productImage,
+                                          if (product.imagePath.isNotEmpty)
+                                            const SizedBox(
+                                              width: AppSpacing.md,
+                                            ),
+                                          productDetails,
+                                        ],
+                                      ),
+                                      const SizedBox(height: AppSpacing.md),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [actionButtons],
+                                      ),
+                                    ],
+                                  )
+                                : Row(
+                                    children: [
+                                      productImage,
+                                      if (product.imagePath.isNotEmpty)
+                                        const SizedBox(width: AppSpacing.md),
+                                      productDetails,
+                                      actionButtons,
+                                    ],
+                                  ),
+                          ),
+                        );
+                      },
                     );
                   },
                 );

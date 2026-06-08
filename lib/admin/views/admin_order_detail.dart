@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,7 +7,6 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/order.dart';
 import '../../models/user_profile.dart';
 import '../../providers/admin_provider.dart';
-import '../../services/admin_service.dart';
 
 class AdminOrderDetail extends ConsumerStatefulWidget {
   const AdminOrderDetail({super.key, required this.order});
@@ -23,17 +21,15 @@ class _AdminOrderDetailState extends ConsumerState<AdminOrderDetail> {
   late String _status;
   bool _saving = false;
 
-  static const statusOptions = [
-    'pending',
-    'processing',
-    'delivered',
-    'cancelled',
-  ];
+  static const statusOptions = ['pending', 'processing', 'delivered'];
 
   @override
   void initState() {
     super.initState();
     _status = widget.order.status.toLowerCase();
+    if (!statusOptions.contains(_status)) {
+      _status = 'pending';
+    }
   }
 
   Future<void> _saveStatus() async {
@@ -160,7 +156,7 @@ class _AdminOrderDetailState extends ConsumerState<AdminOrderDetail> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _status,
+                      initialValue: _status,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                       ),
