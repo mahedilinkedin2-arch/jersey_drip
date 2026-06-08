@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 import 'email_otp_service.dart';
 
@@ -177,7 +176,13 @@ class OtpService {
 
   int _readInt(Object? value) {
     if (value is int) return value;
-    if (value is num) return value.toInt();
+    if (value is double) return value.toInt();
+    if (value is num) {
+      final stringValue = value.toString();
+      return int.tryParse(stringValue) ?? value.toInt();
+    }
+    final stringValue = value?.toString();
+    if (stringValue != null) return int.tryParse(stringValue) ?? 0;
     return 0;
   }
 

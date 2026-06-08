@@ -15,7 +15,9 @@ import '../services/product_service.dart';
 
 class AdminService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
+    region: 'us-central1',
+  );
   final ProductService _productService = ProductService();
 
   Stream<AdminDashboardStats> getDashboardStatsStream() {
@@ -112,7 +114,37 @@ class AdminService {
   }
 
   Future<void> updateOrderStatus(String orderId, String status) async {
-    await _db.collection('orders').doc(orderId).update({'status': status});
+    final orderRef = _db.collection('orders').doc(orderId);
+    try {
+      await _db.runTransaction((txn) async {
+        final snap = await txn.get(orderRef);
+        if (!snap.exists) {
+          throw StateError('Order not found');
+        }
+        final current =
+            (snap.data()?['status'] as String?)?.toLowerCase() ?? '';
+        if (current == 'delivered' && status.toLowerCase() != 'delivered') {
+          throw StateError(
+            'Delivered orders are immutable and cannot be modified',
+          );
+        }
+        txn.update(orderRef, {'status': status});
+      });
+      if (kDebugMode) {
+        developer.log(
+          'Order $orderId status updated -> $status',
+          name: 'AdminService',
+        );
+      }
+    } catch (e, st) {
+      developer.log(
+        'Failed to update order $orderId: $e',
+        name: 'AdminService',
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
   }
 
   Future<void> addProduct(Map<String, dynamic> productData) async {
@@ -143,9 +175,19 @@ class AdminService {
   }
 
   Future<void> deleteProduct(String productId) async {
-    await _functions.httpsCallable('deleteProductAdmin').call(<String, dynamic>{
-      'productId': productId,
-    });
+    try {
+      await _functions.httpsCallable('deleteProductAdmin').call(
+        <String, dynamic>{'productId': productId},
+      );
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'not-found') {
+        await _functions.httpsCallable('deleteProduct').call(<String, dynamic>{
+          'productId': productId,
+        });
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> updateProductActive(String productId, bool isActive) async {
@@ -187,39 +229,45 @@ class AdminService {
 
   Future<void> updateUserRole(String uid, String role) async {
     final normalizedRole = role.toLowerCase();
-    final userRef = _db.collection('users').doc(uid);
-    final snapshot = await userRef.get();
 
-    if (!snapshot.exists) {
-      throw StateError('User not found');
+    if (normalizedRole != 'user' && normalizedRole != 'admin') {
+      throw ArgumentError.value(
+        role,
+        'role',
+        'Role must be either user or admin.',
+      );
     }
 
-    final currentRole =
-        (snapshot.data()?['role'] as String?)?.toLowerCase() ?? 'user';
-    final adminRoles = ['admin', 'superadmin'];
-    final isCurrentAdmin = adminRoles.contains(currentRole);
-    final willBeAdmin = adminRoles.contains(normalizedRole);
-
-    if (isCurrentAdmin && !willBeAdmin) {
-      final adminSnapshot = await _db
-          .collection('users')
-          .where('role', whereIn: adminRoles)
-          .get();
-      final remainingAdmins = adminSnapshot.docs
-          .where((doc) => doc.id != uid)
-          .where((doc) {
-            final roleValue =
-                (doc.data()['role'] as String?)?.toLowerCase() ?? '';
-            return adminRoles.contains(roleValue);
-          })
-          .length;
-
-      if (remainingAdmins == 0) {
-        throw StateError('Cannot remove the last admin from the system.');
+    try {
+      try {
+        await _functions.httpsCallable('updateUserRoleAdmin').call(
+          <String, dynamic>{'uid': uid, 'role': normalizedRole},
+        );
+      } on FirebaseFunctionsException catch (error) {
+        if (error.code == 'not-found') {
+          await _functions.httpsCallable('updateUserRole').call(
+            <String, dynamic>{'uid': uid, 'role': normalizedRole},
+          );
+        } else {
+          rethrow;
+        }
       }
-    }
 
-    await userRef.update({'role': normalizedRole});
+      if (kDebugMode) {
+        developer.log(
+          'Requested backend role update for user $uid -> $normalizedRole',
+          name: 'AdminService',
+        );
+      }
+    } catch (e, st) {
+      developer.log(
+        'Failed to request backend role update for $uid: $e',
+        name: 'AdminService',
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
   }
 
   AdminDashboardStats _computeStats(
@@ -237,17 +285,11 @@ class AdminService {
     for (var doc in orderSnap.docs) {
       final data = doc.data();
       final status = (data['status'] ?? '').toString().toLowerCase();
-      final totalPrice = data['totalPrice'];
+      final totalPrice = _readDouble(data['totalPrice']);
 
       if (status == 'delivered') {
         deliveredOrders++;
-        if (totalPrice is int) {
-          totalRevenue += totalPrice.toDouble();
-        } else if (totalPrice is double) {
-          totalRevenue += totalPrice;
-        } else if (totalPrice is String) {
-          totalRevenue += double.tryParse(totalPrice) ?? 0;
-        }
+        totalRevenue += totalPrice;
       } else {
         totalOrders++;
       }
@@ -268,24 +310,20 @@ class AdminService {
       if (hasSizes) {
         for (var sizeEntry in sizes.entries) {
           final sizeData = sizeEntry.value as Map<String, dynamic>? ?? {};
-          final rawStock = sizeData['stock'];
-          final stock = rawStock is int
-              ? rawStock
-              : rawStock is double
-              ? rawStock.toInt()
-              : int.tryParse(rawStock?.toString() ?? '') ?? 0;
+          final stock = _readInt(sizeData['stock']);
           totalStock += stock;
           if (stock == 0) {
             outOfStockCount++;
           }
         }
       } else {
-        final rawQuantity = data['quantity'];
-        totalStock = rawQuantity is int
-            ? rawQuantity
-            : rawQuantity is double
-            ? rawQuantity.toInt()
-            : int.tryParse(rawQuantity?.toString() ?? '') ?? 0;
+        totalStock = _readInt(
+          data['quantity'] ??
+              data['stockQuantity'] ??
+              data['stockquantity'] ??
+              data['stock_quantity'] ??
+              data['stock'],
+        );
         if (totalStock == 0) {
           outOfStockCount++;
         }
@@ -315,5 +353,41 @@ class AdminService {
       outOfStockCount: outOfStockCount,
       totalUsers: totalUsers,
     );
+  }
+
+  int _readInt(Object? value, {int fallback = 0}) {
+    if (value is int) {
+      return value;
+    }
+    if (value is double) {
+      return value.toInt();
+    }
+    if (value is num) {
+      final stringValue = value.toString();
+      return int.tryParse(stringValue) ?? value.toInt();
+    }
+    final stringValue = value?.toString();
+    if (stringValue != null) {
+      return int.tryParse(stringValue) ?? fallback;
+    }
+    return fallback;
+  }
+
+  double _readDouble(Object? value, {double fallback = 0}) {
+    if (value is double) {
+      return value;
+    }
+    if (value is int) {
+      return value.toDouble();
+    }
+    if (value is num) {
+      final stringValue = value.toString();
+      return double.tryParse(stringValue) ?? value.toDouble();
+    }
+    final stringValue = value?.toString();
+    if (stringValue != null) {
+      return double.tryParse(stringValue) ?? fallback;
+    }
+    return fallback;
   }
 }

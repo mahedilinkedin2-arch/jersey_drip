@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 import '../models/product.dart';
 
@@ -175,15 +174,34 @@ class ProductService {
     if (value is int) {
       return value;
     }
-    if (value is num) {
+    if (value is double) {
       return value.toInt();
+    }
+    if (value is num) {
+      final stringValue = value.toString();
+      return int.tryParse(stringValue) ?? value.toInt();
+    }
+    final stringValue = value?.toString();
+    if (stringValue != null) {
+      return int.tryParse(stringValue) ?? fallback;
     }
     return fallback;
   }
 
   double _readDouble(Object? value, {double fallback = 0}) {
-    if (value is num) {
+    if (value is double) {
+      return value;
+    }
+    if (value is int) {
       return value.toDouble();
+    }
+    if (value is num) {
+      final stringValue = value.toString();
+      return double.tryParse(stringValue) ?? value.toDouble();
+    }
+    final stringValue = value?.toString();
+    if (stringValue != null) {
+      return double.tryParse(stringValue) ?? fallback;
     }
     return fallback;
   }

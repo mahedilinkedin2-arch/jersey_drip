@@ -323,8 +323,16 @@ class CartService {
     if (value is int) {
       return value;
     }
-    if (value is num) {
+    if (value is double) {
       return value.toInt();
+    }
+    if (value is num) {
+      final stringValue = value.toString();
+      return int.tryParse(stringValue) ?? value.toInt();
+    }
+    final stringValue = value?.toString();
+    if (stringValue != null) {
+      return int.tryParse(stringValue) ?? fallback;
     }
     return fallback;
   }

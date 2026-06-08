@@ -5,9 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../models/order.dart';
 import '../../providers/admin_provider.dart';
-import 'admin_order_detail.dart';
 
 String _normalizeStatus(String status) {
   final normalized = status.toLowerCase();
@@ -38,15 +36,30 @@ class _AdminOrdersState extends ConsumerState<AdminOrders> {
 
   Future<void> _updateOrderStatus(String orderId, String status) async {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
-    final roleValue = ref
-        .read(roleProvider)
-        .maybeWhen(data: (role) => role.name, orElse: () => 'unknown');
+    final roleValue = await ref
+        .read(adminServiceProvider)
+        .fetchUserProfile(uid)
+        .then((p) => p?.role ?? 'unknown')
+        .catchError((_) => 'unknown');
     final isAdmin = roleValue == 'admin' || roleValue == 'superadmin';
     ref
         .read(adminDebugLogsProvider.notifier)
         .add(
           'Order status update requested for $orderId to $status by uid=$uid role=$roleValue isAdmin=$isAdmin',
         );
+
+    if (!isAdmin) {
+      ref
+          .read(adminDebugLogsProvider.notifier)
+          .add('Order update aborted: not an admin');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permission denied: admin only.')),
+        );
+      }
+      return;
+    }
+
     setState(() => _savingOrders.add(orderId));
     try {
       await ref.read(adminServiceProvider).updateOrderStatus(orderId, status);
@@ -132,12 +145,8 @@ class _AdminOrdersState extends ConsumerState<AdminOrders> {
             child: ordersAsync.when(
               data: (orders) {
                 final searchValue = _searchController.text.trim().toLowerCase();
-                final filteredOrders = orders
+                final filtered = orders
                     .where((order) {
-                      if (_status != 'all' &&
-                          order.status.toLowerCase() != _status) {
-                        return false;
-                      }
                       if (searchValue.isEmpty) return true;
                       return order.orderId.toLowerCase().contains(
                             searchValue,
@@ -146,7 +155,19 @@ class _AdminOrdersState extends ConsumerState<AdminOrders> {
                     })
                     .toList(growable: false);
 
-                if (filteredOrders.isEmpty) {
+                final activeOrders = filtered
+                    .where(
+                      (o) =>
+                          o.status.toLowerCase() == 'pending' ||
+                          o.status.toLowerCase() == 'processing',
+                    )
+                    .toList(growable: false);
+
+                final deliveredOrders = filtered
+                    .where((o) => o.status.toLowerCase() == 'delivered')
+                    .toList(growable: false);
+
+                if (activeOrders.isEmpty && deliveredOrders.isEmpty) {
                   return Center(
                     child: Text(
                       'No orders match the current search or filter.',
@@ -155,60 +176,159 @@ class _AdminOrdersState extends ConsumerState<AdminOrders> {
                   );
                 }
 
-                final deliveredRevenue = filteredOrders
-                    .where((order) => order.status.toLowerCase() == 'delivered')
-                    .fold<int>(0, (sum, order) => sum + order.totalPrice);
+                final deliveredRevenue = deliveredOrders.fold<int>(
+                  0,
+                  (sum, order) => sum + order.totalPrice,
+                );
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_status == 'delivered')
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                        child: Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(AppSpacing.md),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  'Delivered revenue',
-                                  style: AppTextStyles.body.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall?.color,
+                    // Active Orders
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Text(
+                        'Active orders',
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 1,
+                      child: activeOrders.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No active orders',
+                                style: AppTextStyles.body,
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: activeOrders.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: AppSpacing.sm),
+                              itemBuilder: (context, index) {
+                                final order = activeOrders[index];
+                                return Card(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                ),
-                                const SizedBox(height: AppSpacing.xs),
-                                Text(
-                                  '৳${NumberFormat.decimalPattern().format(deliveredRevenue)}',
-                                  style: AppTextStyles.headingMedium.copyWith(
-                                    fontSize: 28,
+                                  elevation: 2,
+                                  child: ListTile(
+                                    title: Text(
+                                      order.orderId,
+                                      style: AppTextStyles.body.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    trailing: DropdownButton<String>(
+                                      value: _normalizeStatus(order.status),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: 'pending',
+                                          child: Text('Pending'),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'processing',
+                                          child: Text('Processing'),
+                                        ),
+                                      ],
+                                      onChanged:
+                                          _savingOrders.contains(order.orderId)
+                                          ? null
+                                          : (value) {
+                                              if (value != null) {
+                                                _updateOrderStatus(
+                                                  order.orderId,
+                                                  value,
+                                                );
+                                              }
+                                            },
+                                    ),
                                   ),
-                                ),
-                              ],
+                                );
+                              },
                             ),
+                    ),
+
+                    const SizedBox(height: AppSpacing.md),
+
+                    // Delivered Orders - read-only history
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Text(
+                        'Delivered orders',
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Delivered revenue',
+                                style: AppTextStyles.body.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).textTheme.bodySmall?.color,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                '৳${NumberFormat.decimalPattern().format(deliveredRevenue)}',
+                                style: AppTextStyles.headingMedium.copyWith(
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
+                    ),
                     Expanded(
-                      child: ListView.separated(
-                        itemCount: filteredOrders.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: AppSpacing.sm),
-                        itemBuilder: (context, index) {
-                          final order = filteredOrders[index];
-                          return _OrderCard(
-                            order: order,
-                            isSaving: _savingOrders.contains(order.orderId),
-                            onStatusChanged: (newStatus) =>
-                                _updateOrderStatus(order.orderId, newStatus),
-                          );
-                        },
-                      ),
+                      flex: 1,
+                      child: deliveredOrders.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No delivered orders',
+                                style: AppTextStyles.body,
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: deliveredOrders.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: AppSpacing.sm),
+                              itemBuilder: (context, index) {
+                                final order = deliveredOrders[index];
+                                return Card(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 1,
+                                  child: ListTile(
+                                    title: Text(
+                                      order.orderId,
+                                      style: AppTextStyles.body.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    trailing: Text(
+                                      'Delivered',
+                                      style: AppTextStyles.label,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 );
@@ -223,88 +343,6 @@ class _AdminOrdersState extends ConsumerState<AdminOrders> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _OrderCard extends StatelessWidget {
-  const _OrderCard({
-    required this.order,
-    required this.isSaving,
-    required this.onStatusChanged,
-  });
-
-  final AppOrder order;
-  final bool isSaving;
-  final ValueChanged<String> onStatusChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        title: Text(
-          order.orderId,
-          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: AppSpacing.xs),
-            Text('User: ${order.userId}', style: AppTextStyles.label),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Payment: ${order.paymentStatus} • ${order.paymentMethod}',
-              style: AppTextStyles.body,
-            ),
-          ],
-        ),
-        trailing: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            DropdownButton<String>(
-              value: _normalizeStatus(order.status),
-              items: const [
-                DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                DropdownMenuItem(
-                  value: 'processing',
-                  child: Text('Processing'),
-                ),
-                DropdownMenuItem(value: 'delivered', child: Text('Delivered')),
-              ],
-              onChanged: isSaving
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        onStatusChanged(value);
-                      }
-                    },
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '৳${NumberFormat.decimalPattern().format(order.totalPrice)}',
-              style: AppTextStyles.headingMedium.copyWith(fontSize: 18),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '${order.createdAt.toLocal()}'.split(' ').first,
-              style: AppTextStyles.label,
-            ),
-          ],
-        ),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => AdminOrderDetail(order: order)),
-          );
-        },
       ),
     );
   }

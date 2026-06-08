@@ -146,6 +146,14 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
                                 TextButton(
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppColors.accent,
+                                    backgroundColor: AppColors.surfaceSoft,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.sm,
+                                      vertical: AppSpacing.xs,
+                                    ),
+                                  ),
                                   onPressed: canChange && !_saving
                                       ? () => _changeRole(user, targetRole)
                                       : null,
@@ -176,9 +184,12 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
 
   Future<void> _changeRole(UserProfile user, String targetRole) async {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
-    final roleValue = ref
-        .read(roleProvider)
-        .maybeWhen(data: (role) => role.name, orElse: () => 'unknown');
+    final roleValue = await ref
+        .read(adminServiceProvider)
+        .fetchUserProfile(uid)
+        .then((p) => p?.role ?? 'unknown')
+        .catchError((_) => 'unknown');
+
     final isAdmin = roleValue == 'admin' || roleValue == 'superadmin';
     ref
         .read(adminDebugLogsProvider.notifier)
@@ -187,7 +198,19 @@ class _AdminUsersState extends ConsumerState<AdminUsers> {
         );
     setState(() => _saving = true);
     try {
+      if (!isAdmin) {
+        throw StateError('Current user is not an admin');
+      }
+
       await ref.read(adminServiceProvider).updateUserRole(user.uid, targetRole);
+      // Verify update committed by fetching the updated profile
+      final updated = await ref
+          .read(adminServiceProvider)
+          .fetchUserProfile(user.uid);
+      final newRole = updated?.role ?? targetRole;
+      ref
+          .read(adminDebugLogsProvider.notifier)
+          .add('Role updated for ${user.uid} -> $newRole');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
