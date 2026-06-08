@@ -34,7 +34,7 @@ class AdminProductDetail extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
                     height: 220,
-                    color: AppColors.backgroundLight,
+                    color: const Color.fromARGB(255, 203, 142, 142),
                     child: const Icon(Icons.image_not_supported, size: 64),
                   ),
                 ),

@@ -7,10 +7,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      let userRole = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
       return signedIn()
-        && userRole is string
-        && userRole.toLowerCase() in ['admin', 'superadmin'];
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role is string
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.toLowerCase() in ['admin', 'superadmin'];
     }
 
     function ownsSession() {
@@ -105,11 +105,11 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == userId;
 
       match /cart/{itemId} {
-        allow read, write: if signedIn() && request.auth.uid == userId;
+        allow read, write: if isAdmin() || (signedIn() && request.auth.uid == userId);
       }
 
       match /wishlist/{itemId} {
-        allow read, write: if signedIn() && request.auth.uid == userId;
+        allow read, write: if isAdmin() || (signedIn() && request.auth.uid == userId);
       }
 
       match /orders/{orderId} {

@@ -52,7 +52,6 @@ class OtpService {
         ? _collection.doc()
         : _collection.doc(verificationId);
     final id = docRef.id;
-    debugPrint('OTP FUNCTION CALLED');
     final otp = generateOtp();
     final now = Timestamp.now();
     final expiresAt = Timestamp.fromDate(now.toDate().add(expiryDuration));
@@ -76,9 +75,7 @@ class OtpService {
     } catch (_) {
       try {
         await docRef.delete();
-      } catch (deleteError) {
-        debugPrint('OTP CLEANUP FAILED: $deleteError');
-      }
+      } catch (_) {}
       rethrow;
     }
   }

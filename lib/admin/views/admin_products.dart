@@ -224,6 +224,7 @@ class _AdminProductsState extends ConsumerState<AdminProducts> {
                                       );
                                       if (confirmed != true) return;
                                       setState(() => _saving = true);
+                                      print("PRODUCT ID: ${product.id}");
                                       try {
                                         await ref
                                             .read(adminServiceProvider)

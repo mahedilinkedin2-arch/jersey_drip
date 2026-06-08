@@ -37,10 +37,8 @@ class AuthService {
   }
 
   Future<UserCredential> signInWithGoogle() async {
-    print('[AuthService] signInWithGoogle started');
     final googleSignIn = GoogleSignIn();
     final googleUser = await googleSignIn.signIn();
-    print('[AuthService] googleUser: $googleUser');
     if (googleUser == null) {
       throw FirebaseAuthException(
         code: 'google-sign-in-cancelled',
@@ -49,9 +47,6 @@ class AuthService {
     }
 
     final googleAuth = await googleUser.authentication;
-    print(
-      '[AuthService] googleAuth idToken: ${googleAuth.idToken != null} accessToken: ${googleAuth.accessToken != null}',
-    );
     if (googleAuth.idToken == null && googleAuth.accessToken == null) {
       throw FirebaseAuthException(
         code: 'invalid-credential',
@@ -78,11 +73,15 @@ class AuthService {
   }
 
   Future<void> _saveUserProfile(User user, {String? name}) async {
-    await _firestore.collection('users').doc(user.uid).set({
+    final userRef = _firestore.collection('users').doc(user.uid);
+    final snapshot = await userRef.get();
+    final existingRole = (snapshot.data()?['role'] as String?) ?? 'user';
+
+    await userRef.set({
       'uid': user.uid,
       'name': name ?? user.displayName ?? 'New User',
       'email': user.email ?? '',
-      'role': 'user',
+      'role': existingRole,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

@@ -1,5 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -98,7 +96,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ],
               ),
             ),
-            if (kDebugMode) const _AdminDebugPanel(),
           ],
         ),
         bottomNavigationBar: !isWide
@@ -129,100 +126,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ],
               )
             : null,
-      ),
-    );
-  }
-}
-
-class _AdminDebugPanel extends ConsumerWidget {
-  const _AdminDebugPanel();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
-    final roleValue = ref.watch(roleProvider);
-    final logs = ref.watch(adminDebugLogsProvider);
-    final roleLabel = roleValue.when(
-      data: (role) => role.name,
-      loading: () => 'loading',
-      error: (_, __) => 'unknown',
-    );
-    final isAdmin = roleValue.when(
-      data: (role) => role == UserRole.admin || role == UserRole.superadmin,
-      loading: () => false,
-      error: (_, __) => false,
-    );
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
-        color: Colors.grey.shade50,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Admin DEBUG',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('uid: $uid', style: const TextStyle(fontSize: 12)),
-                    const SizedBox(height: 2),
-                    Text(
-                      'role: $roleLabel',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'isAdmin: $isAdmin',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: () =>
-                    ref.read(adminDebugLogsProvider.notifier).clear(),
-                icon: const Icon(Icons.clear),
-                tooltip: 'Clear debug logs',
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (logs.isEmpty)
-            const Text(
-              'No debug messages yet.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: logs.reversed
-                  .take(6)
-                  .map(
-                    (message) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        message,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-        ],
       ),
     );
   }

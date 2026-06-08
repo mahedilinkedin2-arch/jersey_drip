@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
@@ -14,6 +15,7 @@ import '../services/product_service.dart';
 
 class AdminService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   final ProductService _productService = ProductService();
 
   Stream<AdminDashboardStats> getDashboardStatsStream() {
@@ -141,29 +143,9 @@ class AdminService {
   }
 
   Future<void> deleteProduct(String productId) async {
-    final document = _db.collection('products').doc(productId);
-    final cartSnapshot = await _db
-        .collectionGroup('cart')
-        .where('productId', isEqualTo: productId)
-        .get();
-    final wishlistSnapshot = await _db
-        .collectionGroup('wishlist')
-        .where('productId', isEqualTo: productId)
-        .get();
-
-    final deletions = <DocumentReference<Map<String, dynamic>>>[document];
-    deletions.addAll(cartSnapshot.docs.map((doc) => doc.reference));
-    deletions.addAll(wishlistSnapshot.docs.map((doc) => doc.reference));
-
-    const batchLimit = 500;
-    for (var start = 0; start < deletions.length; start += batchLimit) {
-      final batch = _db.batch();
-      final end = (start + batchLimit).clamp(0, deletions.length);
-      for (final reference in deletions.sublist(start, end)) {
-        batch.delete(reference);
-      }
-      await batch.commit();
-    }
+    await _functions.httpsCallable('deleteProductAdmin').call(<String, dynamic>{
+      'productId': productId,
+    });
   }
 
   Future<void> updateProductActive(String productId, bool isActive) async {

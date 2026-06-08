@@ -52,7 +52,6 @@ class ProductSeeder {
       if (existingProductIds.contains(documentId) ||
           existingProductNames.contains(normalizedName) ||
           existingProductImagePaths.contains(normalizedImagePath)) {
-        debugPrint('Product already exists, skipping: $name');
         continue;
       }
 
@@ -60,7 +59,6 @@ class ProductSeeder {
       existingProductIds.add(documentId);
       existingProductNames.add(normalizedName);
       existingProductImagePaths.add(normalizedImagePath);
-      debugPrint('Seeded product: $name');
     }
   }
 }

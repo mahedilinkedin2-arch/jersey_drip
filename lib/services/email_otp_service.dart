@@ -38,8 +38,6 @@ import '../config/emailjs_config.dart';
 class EmailOtpService {
   Future<bool> sendOtp({required String toEmail, required String otp}) async {
     try {
-      print('EMAILJS REST START');
-
       final response = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
         headers: {'Content-Type': 'application/json'},
@@ -51,12 +49,8 @@ class EmailOtpService {
         }),
       );
 
-      print('STATUS: ${response.statusCode}');
-      print('BODY: ${response.body}');
-
       return response.statusCode == 200;
     } catch (e) {
-      print('EMAILJS ERROR: $e');
       return false;
     }
   }

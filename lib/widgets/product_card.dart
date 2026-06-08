@@ -58,9 +58,6 @@ class ProductCard extends StatelessWidget {
         return fileNameMatches.single;
       }
 
-      debugPrint('IMAGE ASSET NOT FOUND IN MANIFEST');
-      debugPrint('Firestore path: $imagePath');
-      debugPrint('Normalized path: $normalizedPath');
       return normalizedPath;
     });
   }
@@ -122,9 +119,6 @@ class ProductCard extends StatelessWidget {
 
                               if (resolvedPath == null ||
                                   resolvedPath == imagePath) {
-                                debugPrint('IMAGE LOAD FAILED');
-                                debugPrint('Path: $imagePath');
-                                debugPrint('Error: $error');
                                 return const Center(
                                   child: Icon(Icons.broken_image, size: 48),
                                 );
@@ -134,10 +128,6 @@ class ProductCard extends StatelessWidget {
                                 resolvedPath,
                                 fit: BoxFit.contain,
                                 errorBuilder: (context, error, stackTrace) {
-                                  debugPrint('IMAGE LOAD FAILED');
-                                  debugPrint('Path: $resolvedPath');
-                                  debugPrint('Original path: $imagePath');
-                                  debugPrint('Error: $error');
                                   return const Center(
                                     child: Icon(Icons.broken_image, size: 48),
                                   );

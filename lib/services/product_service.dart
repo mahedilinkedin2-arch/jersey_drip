@@ -36,7 +36,6 @@ class ProductService {
       final productKey = _productIdentityKey(product);
 
       if (seenProductKeys.contains(productKey)) {
-        debugPrint('Duplicate product hidden: ${product.name}');
         continue;
       }
 
@@ -101,12 +100,6 @@ class ProductService {
         'imageURL',
       ]),
     );
-
-    if (imagePath.isEmpty) {
-      debugPrint('PRODUCT IMAGE PATH MISSING');
-      debugPrint('Product document id: $documentId');
-      debugPrint('Available fields: ${data.keys.join(', ')}');
-    }
 
     return Product(
       id: documentId,
